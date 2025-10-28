@@ -1,0 +1,16 @@
+# environment variables
+.env
+
+# MySQL data
+db-data/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Composer files
+/vendor/
+
+# IDE files
+.idea/
+.vscode/
