@@ -3,7 +3,7 @@ services:
     build:
       context: ./php
     volumes:
-      - ./src:/var/www/html
+      - ./:/var/www/html
     environment:
       - MYSQL_HOST=${MYSQL_HOST}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -18,7 +18,7 @@ services:
     ports:
       - "${NGINX_PORT}:80"
     volumes:
-      - ./src:/var/www/html
+      - ./:/var/www/html
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - php-app
