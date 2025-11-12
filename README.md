@@ -1,4 +1,4 @@
-````markdown
+
 # mySimplePlanner
 
 A simple task planner with a PHP API backend and a Next.js frontend, all running via Docker Compose.
@@ -37,7 +37,7 @@ Once your `.env` file is ready, you can launch the entire application stack with
 ```bash
 sudo docker compose up --build -d
 ```
-````
+
 
 - `sudo`: Required if your user account is not in the `docker` group.
 - `docker compose up`: Starts all services defined in `docker-compose.yml`.
