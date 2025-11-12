@@ -1,9 +1,11 @@
 services:
   php-app:
     build:
-      context: ./php
+      context: .
+      dockerfile: ./php/Dockerfile
     volumes:
       - ./:/var/www/html
+      - /var/www/html/vendor
     environment:
       - MYSQL_HOST=${MYSQL_HOST}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -58,4 +60,3 @@ volumes:
 networks:
   app-network:
     driver: bridge
-
