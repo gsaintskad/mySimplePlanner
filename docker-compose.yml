@@ -1,4 +1,11 @@
 services:
+  frontend-app:
+    build:
+      context: ./frontend
+    environment:
+      NODE_ENV: production
+    networks:
+      - app-network
   php-app:
     build:
       context: .
