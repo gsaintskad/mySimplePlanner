@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAppSelector } from "../store/hooks";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = true;
-  //   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  // const isAuthenticated = true;
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const router = useRouter();
 
   useEffect(() => {
