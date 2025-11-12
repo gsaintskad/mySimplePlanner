@@ -51,6 +51,3 @@ After the containers are up and running, your application will be available at:
 - **Main Application (Frontend)**: `http://localhost:8080` (or your custom `NGINX_PORT`)
 - **phpMyAdmin**: `http://localhost:8081` (or your custom `PMA_PORT`)
 
-```
-
-```
