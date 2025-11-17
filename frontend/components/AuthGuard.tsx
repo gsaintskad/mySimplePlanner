@@ -10,9 +10,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // In a real app, you'd also check for a token in localStorage
-    // and dispatch an action to re-authenticate.
-    // For this example, we rely on the Redux state.
     if (!isAuthenticated) {
       router.replace("/login");
     }
