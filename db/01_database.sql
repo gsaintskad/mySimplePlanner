@@ -2,7 +2,10 @@ CREATE TABLE IF NOT EXISTS users
 (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL
+    password VARCHAR(255) NOT NULL,
+    /* tokeny */
+    refresh_token VARCHAR(512) NULL,
+    refresh_token_expires_at DATETIME NULL
 );
 
 CREATE TABLE IF NOT EXISTS tasks

@@ -2,78 +2,163 @@
 
 namespace App\Controllers;
 
-use App\Models\User;
-use Firebase\JWT\JWT;
+// -stare importy
+use App\Services\AuthService; // new
+use Exception; // Nowy import
 
 class AuthController extends ApiController
 {
-    // Przetwarza dane logowania z JSON i ZWRACA TOKEN
+    private $authService;
+
+    public function __construct()
+    {
+        parent::__construct();
+        // Kontroler tworzy instancję serwisu
+        $this->authService = new AuthService();
+    }
+
+    /* 
+    * Metody createAccessToken i createRefreshToken przeniesione do AuthService.
+     */
+
+    /*
+     *
+     * Ustawia refresh token jako bezpieczne ciasteczko HttpOnly.
+     * Logika HTTP, zostaje w kontrolerze.
+     */
+    private function setRefreshTokenCookie(string $token)
+    {
+        setcookie('refreshToken', $token, [
+            'expires' => time() + 604800, // 7 dni
+            'path' => '/api/', // Dostępne tylko dla ścieżek API
+            'httponly' => true, // Tylko HTTP (niewidoczne dla JavaScript)
+            'secure' => false, // TODO: W produkcji ustaw na TRUE (wymaga HTTPS)
+            'samesite' => 'Strict' // Ochrona CSRF
+        ]);
+    }
+
+    /**
+     * Czyści ciasteczko refresh tokena.
+     * zostaje w kontrolerze
+     */
+    private function clearRefreshTokenCookie()
+    {
+        setcookie('refreshToken', '', [
+            'expires' => time() - 3600, // Ustaw przeszłą datę
+            'path' => '/api/',
+            'httponly' => true,
+            'secure' => false, // TODO: W produkcji TRUE
+            'samesite' => 'Strict'
+        ]);
+    }
+
+
+    /**
+     * Obsługuje żądanie logowania.
+     */
     public function handleLogin()
     {
-        $data = $this->getJsonInput();
-        $name = $data['name'] ?? '';
-        $password = $data['password'] ?? '';
+        try {
+            // 1. Pobierz dane HTTP
+            $data = $this->getJsonInput();
+            $name = $data['name'] ?? '';
+            $password = $data['password'] ?? '';
 
-        $userModel = new User();
-        $user = $userModel->findByName($name);
+            // 2. Wywołaj logikę biznesową (Serwis)
+            $tokens = $this->authService->login($name, $password);
 
-        if ($user && password_verify($password, $user['password'])) {
-            // Hasło poprawne - generuj token JWT
-            
-            $secretKey = getenv('JWT_SECRET'); // Ten sam sekret co w ApiController
-            $issuedAt = time();
-            $expirationTime = $issuedAt + 3600; // Token ważny przez 1 godzinę
-            
-            $payload = [
-                'iat' => $issuedAt,
-                'exp' => $expirationTime,
-                'data' => [
-                    'userId' => $user['id'],
-                    'userName' => $user['name']
-                ]
-            ];
-
-            $token = JWT::encode($payload, $secretKey, 'HS256');
-
-            // Zwróć token klientowi
+            // 3. Obsłuż odpowiedź HTTP
+            $this->setRefreshTokenCookie($tokens['refreshToken']);
             $this->sendJsonResponse([
                 'success' => true,
                 'message' => 'Login successful',
-                'token' => $token
+                'token' => $tokens['accessToken']
             ], 200);
-            
-        } else {
-            $this->sendJsonResponse(['success' => false, 'message' => 'Invalid name or password'], 401);
+
+        } catch (Exception $e) {
+            // 4. Obsłuż błędy z serwisu
+            $this->sendJsonResponse(
+                ['success' => false, 'message' => $e->getMessage()], 
+                $e->getCode() ?: 401 // Użyj kodu błędu z wyjątku (domyślnie 401)
+            );
         }
     }
 
-    // Funkcja logout() została usunięta.
+    /**
+     * Obsługuje żądanie odświeżenia tokena.
+     */
+    public function handleRefresh()
+    {
+        try {
+            // 1. Pobierz dane HTTP
+            $refreshToken = $_COOKIE['refreshToken'] ?? '';
+            
+            // 2. Wywołaj logikę biznesową (Serwis)
+            $newAccessToken = $this->authService->refresh($refreshToken);
 
-    // Przetwarza dane rejestracji z JSON (bez zmian)
+            // 3. Obsłuż odpowiedź HTTP
+            $this->sendJsonResponse([
+                'success' => true,
+                'token' => $newAccessToken
+            ], 200);
+
+        } catch (Exception $e) {
+            // 4. Obsłuż błędy
+            $this->sendJsonResponse(
+                ['success' => false, 'message' => $e->getMessage()], 
+                $e->getCode() ?: 401
+            );
+        }
+    }
+
+    /**
+     * Obsługuje żądanie wylogowania.
+     */
+    public function handleLogout()
+    {
+        try {
+            // 1. Pobierz dane HTTP
+            $refreshToken = $_COOKIE['refreshToken'] ?? '';
+            
+            // 2. Wywołaj logikę biznesową (Serwis)
+            $this->authService->logout($refreshToken);
+
+            // 3. Obsłuż odpowiedź HTTP
+            $this->clearRefreshTokenCookie();
+            $this->sendJsonResponse(['success' => true, 'message' => 'Logged out'], 200);
+
+        } catch (Exception $e) {
+            // 4. Obsłuż błędy (chociaż logout nie powinien rzucać błędów)
+            $this->sendJsonResponse(
+                ['success' => false, 'message' => $e->getMessage()], 
+                $e->getCode() ?: 500
+            );
+        }
+    }
+    
+    /**
+     * Obsługuje żądanie rejestracji.
+     */
     public function handleRegistration()
     {
-        $data = $this->getJsonInput();
-        $name = $data['name'] ?? '';
-        $password = $data['password'] ?? '';
+        try {
+            // 1. Pobierz dane HTTP
+            $data = $this->getJsonInput();
+            $name = $data['name'] ?? '';
+            $password = $data['password'] ?? '';
 
-        if (empty($name) || empty($password)) {
-            $this->sendJsonResponse(['success' => false, 'message' => 'Name and password are required'], 400);
-            return;
-        }
+            // 2. Wywołaj logikę biznesową (Serwis)
+            $this->authService->register($name, $password);
 
-        $userModel = new User();
+            // 3. Obsłuż odpowiedź HTTP
+            $this->sendJsonResponse(['success' => true, 'message' => 'Registration successful'], 201);
 
-        if ($userModel->findByName($name)) {
-            $this->sendJsonResponse(['success' => false, 'message' => 'User with this name already exists'], 409); // 409 Conflict
-            return;
-        }
-
-        $success = $userModel->create($name, $password);
-
-        if ($success) {
-            $this->sendJsonResponse(['success' => true, 'message' => 'Registration successful'], 201); // 201 Created
-        } else {
-            $this->sendJsonResponse(['success' => false, 'message' => 'Error during registration'], 500);
+        } catch (Exception $e) {
+            // 4. Obsłuż błędy
+            $this->sendJsonResponse(
+                ['success' => false, 'message' => $e->getMessage()], 
+                $e->getCode() ?: 400 // Domyślnie 400 dla złych danych
+            );
         }
     }
 }
