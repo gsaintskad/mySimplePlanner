@@ -56,10 +56,17 @@ if ($resource === 'login' && $method === 'POST') {
     exit;
 }
 
-// 3. ENDPOINT /api/logout ZOSTAŁ USUNIĘTY
-// Wylogowanie w JWT polega na usunięciu tokena po stronie klienta.
+if ($resource === 'refresh' && $method === 'POST') {
+    (new AuthController())->handleRefresh();
+    exit;
+}
 
-// Routing dla Tasks (bez zmian)
+if ($resource === 'logout' && $method === 'POST') {
+    (new AuthController())->handleLogout();
+    exit;
+}
+
+// Routing dla Tasks
 if ($resource === 'tasks') {
     $controller = new TaskController();
 
