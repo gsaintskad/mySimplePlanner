@@ -1,8 +1,9 @@
 export interface Task {
-  id: string;
-  topic: string;
+  id: number;
+  user_id: number;
   title: string;
   description: string;
-  importance: number; // 0-5
-  createdAt: string; // Added for sorting/filtering by date
+  priority: number;
+  due_date: string;
+  created_at: string;
 }

@@ -1,62 +1,155 @@
-// file: frontend/store/authApi.ts
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import {
+  createApi,
+  fetchBaseQuery,
+  BaseQueryFn,
+  FetchArgs,
+  FetchBaseQueryError,
+} from "@reduxjs/toolkit/query/react";
 import { setCredentials, logOut } from "./authSlice";
+import { Task } from "@/lib/types";
 import type { RootState } from "./store";
 
-// Define the response type for login
 interface LoginResponse {
   success: boolean;
   message: string;
-  token?: string;
+  token: string;
 }
 
-// Define the response type for registration
 interface RegisterResponse {
   success: boolean;
   message: string;
 }
 
+interface RefreshResponse {
+  success: boolean;
+  token: string;
+}
+
+// Base query with token header
+const baseQuery = fetchBaseQuery({
+  baseUrl: "/",
+  prepareHeaders: (headers, { getState }) => {
+    const token = (getState() as RootState).auth.token;
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return headers;
+  },
+});
+
+// Wrapper to handle silent refresh (HttpOnly cookie) on 401
+const baseQueryWithReauth: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  let result = await baseQuery(args, api, extraOptions);
+
+  if (result.error && result.error.status === 401) {
+    const url = typeof args === "string" ? args : args.url;
+    if (url === "/api/refresh") {
+      api.dispatch(logOut());
+      return result;
+    }
+
+    const refreshResult = await baseQuery(
+      { url: "/api/refresh", method: "POST" },
+      api,
+      extraOptions
+    );
+
+    if (refreshResult.data) {
+      const refreshData = refreshResult.data as RefreshResponse;
+      const currentUser = (api.getState() as RootState).auth.user;
+
+      api.dispatch(
+        setCredentials({
+          token: refreshData.token,
+          user: currentUser || "",
+        })
+      );
+
+      result = await baseQuery(args, api, extraOptions);
+    } else {
+      api.dispatch(logOut());
+    }
+  }
+  return result;
+};
+
 export const authApi = createApi({
   reducerPath: "authApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: "/", // Base URL is root because we are using the proxy
-    prepareHeaders: (headers, { getState }) => {
-      // Add the auth token to headers if it exists
-      const token = (getState() as RootState).auth.token;
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ["Tasks"], // Used to auto-refresh the list after updates
   endpoints: (builder) => ({
+    // --- Auth ---
     login: builder.mutation<LoginResponse, any>({
       query: (credentials) => ({
-        url: "/api/login", // Will be proxied to http://localhost:8080/api/login
+        url: "/api/login",
         method: "POST",
         body: credentials,
       }),
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
-          if (data.token) {
-            dispatch(setCredentials({ token: data.token, user: arg.name }));
-          }
-        } catch (error) {
-          // Handle error
-        }
+          dispatch(setCredentials({ token: data.token, user: arg.name }));
+        } catch (error) {}
       },
     }),
     register: builder.mutation<RegisterResponse, any>({
       query: (credentials) => ({
-        url: "/api/register", // Will be proxied to http://localhost:8080/api/register
+        url: "/api/register",
         method: "POST",
         body: credentials,
       }),
     }),
-    // You can add protected endpoints here, e.g., getTasks
+    logout: builder.mutation<void, void>({
+      query: () => ({
+        url: "/api/logout",
+        method: "POST",
+      }),
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        dispatch(logOut());
+      },
+    }),
+
+    // --- Tasks ---
+    getTasks: builder.query<Task[], void>({
+      query: () => "/api/tasks",
+      providesTags: ["Tasks"],
+    }),
+    createTask: builder.mutation<Task, Partial<Task>>({
+      query: (task) => ({
+        url: "/api/tasks",
+        method: "POST",
+        body: task,
+      }),
+      invalidatesTags: ["Tasks"],
+    }),
+    updateTask: builder.mutation<void, { id: number; data: Partial<Task> }>({
+      query: ({ id, data }) => ({
+        url: `/api/tasks/${id}`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: ["Tasks"],
+    }),
+    deleteTask: builder.mutation<void, number>({
+      query: (id) => ({
+        url: `/api/tasks/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Tasks"],
+    }),
   }),
 });
 
-// Export hooks for use in components
-export const { useLoginMutation, useRegisterMutation } = authApi;
+export const {
+  useLoginMutation,
+  useRegisterMutation,
+  useLogoutMutation,
+  useGetTasksQuery,
+  useCreateTaskMutation,
+  useUpdateTaskMutation,
+  useDeleteTaskMutation,
+} = authApi;
