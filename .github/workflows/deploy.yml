@@ -15,9 +15,9 @@ jobs:
           script: |
 
             cd /home/ubuntu/production/mySimplePlanner
-            docker compose down
+            sudo docker compose down
             # docker compose down -v
 
             git pull origin main --force
 
-            docker compose up --build -d
+            sudo docker compose up --build -d
