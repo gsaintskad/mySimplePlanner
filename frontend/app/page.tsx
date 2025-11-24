@@ -15,7 +15,7 @@ export default function Home() {
       <main className="flex w-full max-w-lg flex-col items-center text-center">
         {/* Header */}
         <h1 className="text-5xl font-bold text-black dark:text-white mb-6">
-          mySimplePlanner
+          mySmartPlanner
         </h1>
         <p className="text-xl text-neutral-600 dark:text-neutral-400 mb-12">
           Your tasks, simplified and connected.
