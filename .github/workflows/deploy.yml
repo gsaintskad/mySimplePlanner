@@ -16,7 +16,7 @@ jobs:
 
             cd /home/ubuntu/production/mySimplePlanner
             sudo docker compose down
-            # docker compose down -v
+            #sudo docker compose down -v
 
             git pull origin main --force
 
