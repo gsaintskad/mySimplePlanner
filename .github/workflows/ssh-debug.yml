@@ -1,36 +1,38 @@
-name: Simple SSH Test
-on:
-  workflow_dispatch: # Trigger manually from the "Actions" tab
+name: Debug SSH Connection
+on: workflow_dispatch
 
 jobs:
-  verify_connection:
+  debug_ssh:
     runs-on: ubuntu-latest
     steps:
-      - name: Write Log to VPS
+      - name: Test SSH Connection
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          script_stop: true # Crucial: fails the job if any command errors out
+          script_stop: true
           command_timeout: 2m
           script: |
-            # 1. Define the file path (using the logged-in user's home directory)
-            LOG_FILE="$HZ_HOME/github_connection_test.txt"
+            # 1. Print connection details immediately to the GitHub Console
+            echo "----------------------------------------"
+            echo "✅ CONNECTED!"
+            echo "User: $(whoami)"
+            echo "Directory: $(pwd)"
+            echo "Hostname: $(hostname)"
+            echo "----------------------------------------"
 
-            # If $HZ_HOME is not set, fallback to user's home
-            if [ -z "$LOG_FILE" ]; then
-                LOG_FILE="/home/$(whoami)/github_connection_test.txt"
+            # 2. Test Write Permissions in CURRENT directory
+            echo "Attempting to write file to $(pwd)..."
+            touch debug_proof.txt
+            echo "Hello from GitHub at $(date)" > debug_proof.txt
+
+            # 3. Verify file exists
+            if [ -f "debug_proof.txt" ]; then
+              echo "✅ File created successfully:"
+              ls -l debug_proof.txt
+            else
+              echo "❌ File creation failed"
+              exit 1
             fi
-
-            # 2. Write details to the file
-            echo "========================================" > "$LOG_FILE"
-            echo "✅ GitHub Actions Connection Successful" >> "$LOG_FILE"
-            echo "Timestamp: $(date)" >> "$LOG_FILE"
-            echo "User: $(whoami)" >> "$LOG_FILE"
-            echo "Hostname: $(hostname)" >> "$LOG_FILE"
-            echo "========================================" >> "$LOG_FILE"
-
-            # 3. Output success to the GitHub Actions Console
-            echo "Log file created at: $LOG_FILE"
