@@ -12,15 +12,20 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          debug: true # Enable debug logging in the action
-          script_stop: true # Fail the job if any command fails
+          debug: true
+          script_stop: true
           script: |
-            # 1. Debug Logging: Write to a file on the VPS to prove connection
-            echo "CI/CD connection established at $(date)" >> /home/ubuntu/cicd-debug.log
+            # 1. DIAGNOSTICS: Print server info to GitHub Logs
+            echo "----------------------------------------"
+            echo "Connected to server!"
+            echo "User: $(whoami)"
+            echo "Hostname: $(hostname)"
+            echo "Directory: $(pwd)"
+            echo "----------------------------------------"
 
             # 2. Navigate to project folder
             cd /home/ubuntu/production/mySimplePlanner
-
+            
             # 3. Docker operations
             sudo docker compose down
             #sudo docker compose down -v
