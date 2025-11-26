@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: "/",
+  // basePath: "/",
   // // Add this rewrites block
   // async rewrites() {
   //   return [
