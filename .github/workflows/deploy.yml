@@ -13,32 +13,45 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           debug: true
-          script_stop: true
+          # 'script_stop' was invalid. We use 'set -e' in the script instead.
+          # We force command_timeout to ensure long builds don't hang.
+          command_timeout: 15m
           script: |
-            # 1. STOP ON ERROR: This ensures the job fails if any command fails
+            # 1. STOP ON ERROR
+            # This is crucial. If any command fails (returns non-zero), the whole job fails.
             set -e
 
-            # 2. DIAGNOSTICS: Check where we are and what folders exist
-            echo "--- START DIAGNOSTICS ---"
-            echo "User: $(whoami)"
-            echo "Current Dir: $(pwd)"
-            
-            echo "Listing /home/ubuntu/production contents:"
-            # List files to verify the folder name is correct
-            ls -la /home/ubuntu/production || echo "Directory /home/ubuntu/production does not exist"
+            # 2. DEFINE VARIABLES
+            # Using the HTTPS URL for public repos avoids SSH key complexity
+            REPO_URL="https://github.com/gsaintskad/mysimpleplanner.git"
+            TARGET_DIR="/home/ubuntu/production/mySimplePlanner"
 
-            echo "--- DEPLOYMENT STARTING ---"
+            echo "--- DIAGNOSTICS START ---"
+            echo "Connected as: $(whoami)"
+            echo "Hostname: $(hostname)"
+            
+            # Check directory existence
+            if [ -d "$TARGET_DIR" ]; then
+              echo "✅ Target directory exists: $TARGET_DIR"
+              cd "$TARGET_DIR"
+            else
+              echo "⚠️ Target directory missing. Creating parent and cloning..."
+              mkdir -p /home/ubuntu/production
+              cd /home/ubuntu/production
+              git clone "$REPO_URL"
+              cd "$TARGET_DIR"
+            fi
+            
+            echo "--- DOCKER OPERATIONS ---"
+            # We allow this to fail (|| true) just in case containers aren't running yet
+            sudo docker compose down || true
 
-            # 3. Navigate (Will fail loudly now if folder is missing)
-            cd /home/ubuntu/production/mySimplePlanner
-            
-            # 4. Docker operations
-            sudo docker compose down
-            
-            # 5. Git pull
+            echo "--- GIT PULL ---"
+            # Ensure we are on the clean main branch
+            git reset --hard
             git pull origin main --force
 
-            # 6. Rebuild
+            echo "--- REBUILD & START ---"
             sudo docker compose up --build -d
-            
+
             echo "--- DEPLOYMENT SUCCESSFUL ---"
