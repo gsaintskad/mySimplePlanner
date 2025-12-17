@@ -25,7 +25,6 @@ interface RefreshResponse {
   token: string;
 }
 
-// Base query with token header
 const baseQuery = fetchBaseQuery({
   baseUrl: "/",
   prepareHeaders: (headers, { getState }) => {
@@ -37,7 +36,6 @@ const baseQuery = fetchBaseQuery({
   },
 });
 
-// Wrapper to handle silent refresh (HttpOnly cookie) on 401
 const baseQueryWithReauth: BaseQueryFn<
   string | FetchArgs,
   unknown,
@@ -80,9 +78,8 @@ const baseQueryWithReauth: BaseQueryFn<
 export const authApi = createApi({
   reducerPath: "authApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Tasks"], // Used to auto-refresh the list after updates
+  tagTypes: ["Tasks"],
   endpoints: (builder) => ({
-    // --- Auth ---
     login: builder.mutation<LoginResponse, any>({
       query: (credentials) => ({
         url: "/api/login",
@@ -112,8 +109,6 @@ export const authApi = createApi({
         dispatch(logOut());
       },
     }),
-
-    // --- Tasks ---
     getTasks: builder.query<Task[], void>({
       query: () => "/api/tasks",
       providesTags: ["Tasks"],
@@ -126,6 +121,7 @@ export const authApi = createApi({
       }),
       invalidatesTags: ["Tasks"],
     }),
+    // Refined updateTask to match PHP backend expectations
     updateTask: builder.mutation<void, { id: number; data: Partial<Task> }>({
       query: ({ id, data }) => ({
         url: `/api/tasks/${id}`,

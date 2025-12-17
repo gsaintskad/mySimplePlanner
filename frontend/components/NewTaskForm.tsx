@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCreateTaskMutation } from "@/store/authApi"; // Use the API hook
+import { useCreateTaskMutation, useUpdateTaskMutation } from "@/store/authApi";
+import { Task } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,58 +33,72 @@ import { StarRating } from "@/components/ui/star-rating";
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  priority: z.number().min(0).max(5),
+  priority: z.number().min(1, "Minimum 1 star is required").max(5),
   due_date: z.string().min(1, "Due date is required"),
 });
 
 type TaskFormInput = z.infer<typeof taskFormSchema>;
 
-export function NewTaskModal() {
-  const [open, setOpen] = useState(false);
-  const [createTask, { isLoading }] = useCreateTaskMutation(); // API mutation
+interface NewTaskModalProps {
+  taskToEdit?: Task;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  setOpen?: (open: boolean) => void;
+}
+
+export function NewTaskModal({ taskToEdit, trigger, open: externalOpen, setOpen: setExternalOpen }: NewTaskModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
+
+  const [createTask, { isLoading: isCreating }] = useCreateTaskMutation();
+  const [updateTask, { isLoading: isUpdating }] = useUpdateTaskMutation();
+  const isLoading = isCreating || isUpdating;
 
   const form = useForm<TaskFormInput>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      priority: 3,
-      due_date: "",
-    },
+    defaultValues: { title: "", description: "", priority: 3, due_date: "" },
   });
+
+  useEffect(() => {
+    if (taskToEdit && open) {
+      form.reset({
+        title: taskToEdit.title,
+        description: taskToEdit.description || "",
+        priority: taskToEdit.priority,
+        due_date: taskToEdit.due_date.replace(" ", "T").slice(0, 16),
+      });
+    } else if (!taskToEdit && open) {
+      form.reset({ title: "", description: "", priority: 3, due_date: "" });
+    }
+  }, [taskToEdit, open, form]);
 
   async function onSubmit(data: TaskFormInput) {
     try {
-      // Backend expects Y-m-d H:i:s, input gives Y-m-dTh:i. We just replace T with space.
       const formattedDate = data.due_date.replace("T", " ") + ":00";
+      const payload = { ...data, due_date: formattedDate };
 
-      await createTask({
-        title: data.title,
-        description: data.description || "",
-        priority: data.priority,
-        due_date: formattedDate,
-      }).unwrap();
-
-      form.reset();
+      if (taskToEdit) {
+        await updateTask({ id: taskToEdit.id, data: payload }).unwrap();
+      } else {
+        await createTask(payload).unwrap();
+      }
       setOpen(false);
     } catch (error) {
-      console.error("Failed to create task:", error);
+      console.error("Failed to save task:", error);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Task
-        </Button>
+        {trigger || <Button><Plus className="mr-2 h-4 w-4" /> New Task</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Task</DialogTitle>
+          <DialogTitle>{taskToEdit ? "Edit Task" : "Create New Task"}</DialogTitle>
           <DialogDescription>
-            Fill in the details for your new task.
+            {taskToEdit ? "Update your task details." : "Fill in the details for your new task."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -94,9 +109,7 @@ export function NewTaskModal() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Design homepage" {...field} />
-                  </FormControl>
+                  <FormControl><Input placeholder="Task title..." {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -107,9 +120,7 @@ export function NewTaskModal() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Task details..." {...field} />
-                  </FormControl>
+                  <FormControl><Textarea placeholder="Task details..." {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -121,9 +132,7 @@ export function NewTaskModal() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Due Date</FormLabel>
-                    <FormControl>
-                      <Input type="datetime-local" {...field} />
-                    </FormControl>
+                    <FormControl><Input type="datetime-local" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -135,31 +144,17 @@ export function NewTaskModal() {
                   <FormItem>
                     <FormLabel>Priority</FormLabel>
                     <FormControl>
-                      <div className="pt-2">
-                        <StarRating
-                          value={field.value}
-                          onChange={field.onChange}
-                        />
-                      </div>
+                      <div className="pt-2"><StarRating value={field.value} onChange={field.onChange} /></div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  "Create Task"
-                )}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (taskToEdit ? "Update Task" : "Create Task")}
               </Button>
             </DialogFooter>
           </form>
