@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useGetTasksQuery } from "@/store/authApi";
+import { useGetTasksQuery, useDeleteTaskMutation } from "@/store/authApi";
 import { Task } from "@/lib/types";
 import {
   Card,
@@ -20,13 +20,24 @@ import {
 } from "@/components/ui/dialog";
 import { StarRating } from "@/components/ui/star-rating";
 import { TaskFilters, TaskFiltersState } from "@/components/TaskFilters";
-import { Loader2, Calendar, Pencil } from "lucide-react";
+import { Loader2, Calendar, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NewTaskModal } from "./NewTaskForm";
 
-// --- TaskCard Sub-Component ---
 function TaskCard({ task }: { task: Task }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [deleteTask, { isLoading: isDeleting }] = useDeleteTaskMutation();
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this task?")) {
+      try {
+        await deleteTask(task.id).unwrap();
+      } catch (err) {
+        console.error("Failed to delete task:", err);
+      }
+    }
+  };
 
   return (
     <Dialog>
@@ -62,18 +73,30 @@ function TaskCard({ task }: { task: Task }) {
                 Created: {new Date(task.created_at).toLocaleString()}
               </DialogDescription>
             </div>
-            {/* New Task Modal used for editing */}
-            <NewTaskModal
-              taskToEdit={task}
-              open={isEditOpen}
-              setOpen={setIsEditOpen}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              }
-            />
+            <div className="flex gap-2">
+              <NewTaskModal
+                taskToEdit={task}
+                open={isEditOpen}
+                setOpen={setIsEditOpen}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Pencil className="h-4 w-4 mr-2" /> Edit
+                  </Button>
+                }
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </DialogHeader>
         <div className="py-4 space-y-4">
@@ -101,7 +124,6 @@ function TaskCard({ task }: { task: Task }) {
   );
 }
 
-// --- Main TaskList Component ---
 export function TaskList() {
   const { data: allTasks = [], isLoading, error } = useGetTasksQuery();
   const [filters, setFilters] = useState<TaskFiltersState>({
@@ -109,15 +131,10 @@ export function TaskList() {
     sort: "newest",
   });
 
-  const handleFiltersChange = (newFilters: Partial<TaskFiltersState>) => {
-    setFilters((prev) => ({ ...prev, ...newFilters }));
-  };
-
   const filteredTasks = useMemo(() => {
     let tasks = [...allTasks];
     if (filters.rating !== "all") {
-      const ratingNum = parseInt(filters.rating);
-      tasks = tasks.filter((task) => task.priority === ratingNum);
+      tasks = tasks.filter((t) => t.priority === parseInt(filters.rating));
     }
     tasks.sort((a, b) => {
       const dateA = new Date(a.created_at).getTime();
@@ -127,38 +144,36 @@ export function TaskList() {
     return tasks;
   }, [allTasks, filters]);
 
-  if (isLoading) {
+  if (isLoading)
     return (
       <div className="flex justify-center py-10">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
-  }
-
-  if (error) {
+  if (error)
     return (
       <div className="text-center py-10 text-red-500">
-        Failed to load tasks. Please try again later.
+        Failed to load tasks.
       </div>
     );
-  }
 
   return (
     <div className="mt-6 space-y-4">
       <h2 className="text-2xl font-semibold">Your Tasks</h2>
-      <TaskFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      <TaskFilters
+        filters={filters}
+        onFiltersChange={(f) => setFilters((prev) => ({ ...prev, ...f }))}
+      />
       {filteredTasks.length === 0 ? (
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              No tasks found. Create one above!
-            </p>
+          <CardContent className="pt-6 text-center text-muted-foreground">
+            No tasks found.
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {filteredTasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
+          {filteredTasks.map((t) => (
+            <TaskCard key={t.id} task={t} />
           ))}
         </div>
       )}

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCreateTaskMutation, useUpdateTaskMutation } from "@/store/authApi";
+import { Task } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,9 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Loader2 } from "lucide-react";
 import { StarRating } from "@/components/ui/star-rating";
-import { Task } from "@/lib/types";
 
-// Schema updated to require minimum 1 star
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
@@ -47,16 +46,10 @@ interface NewTaskModalProps {
   setOpen?: (open: boolean) => void;
 }
 
-export function NewTaskModal({
-  taskToEdit,
-  trigger,
-  open: externalOpen,
-  setOpen: setExternalOpen,
-}: NewTaskModalProps) {
+export function NewTaskModal({ taskToEdit, trigger, open: externalOpen, setOpen: setExternalOpen }: NewTaskModalProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
-  const setOpen =
-    setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
+  const setOpen = setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
 
   const [createTask, { isLoading: isCreating }] = useCreateTaskMutation();
   const [updateTask, { isLoading: isUpdating }] = useUpdateTaskMutation();
@@ -64,53 +57,32 @@ export function NewTaskModal({
 
   const form = useForm<TaskFormInput>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      priority: 3,
-      due_date: "",
-    },
+    defaultValues: { title: "", description: "", priority: 3, due_date: "" },
   });
 
-  // Load existing data when editing
   useEffect(() => {
     if (taskToEdit && open) {
       form.reset({
         title: taskToEdit.title,
         description: taskToEdit.description || "",
         priority: taskToEdit.priority,
-        // Convert SQL format (YYYY-MM-DD HH:mm:ss) to datetime-local format (YYYY-MM-DDTHH:mm)
         due_date: taskToEdit.due_date.replace(" ", "T").slice(0, 16),
       });
     } else if (!taskToEdit && open) {
-      form.reset({
-        title: "",
-        description: "",
-        priority: 3,
-        due_date: "",
-      });
+      form.reset({ title: "", description: "", priority: 3, due_date: "" });
     }
   }, [taskToEdit, open, form]);
 
   async function onSubmit(data: TaskFormInput) {
     try {
       const formattedDate = data.due_date.replace("T", " ") + ":00";
-      const payload = {
-        title: data.title,
-        description: data.description || "",
-        priority: data.priority,
-        due_date: formattedDate,
-      };
+      const payload = { ...data, due_date: formattedDate };
 
       if (taskToEdit) {
-        // Send to PUT /api/tasks/{id}
         await updateTask({ id: taskToEdit.id, data: payload }).unwrap();
       } else {
-        // Send to POST /api/tasks
         await createTask(payload).unwrap();
       }
-
-      form.reset();
       setOpen(false);
     } catch (error) {
       console.error("Failed to save task:", error);
@@ -120,22 +92,13 @@ export function NewTaskModal({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger || (
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Task
-          </Button>
-        )}
+        {trigger || <Button><Plus className="mr-2 h-4 w-4" /> New Task</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>
-            {taskToEdit ? "Edit Task" : "Create New Task"}
-          </DialogTitle>
+          <DialogTitle>{taskToEdit ? "Edit Task" : "Create New Task"}</DialogTitle>
           <DialogDescription>
-            {taskToEdit
-              ? "Modify your task details."
-              : "Fill in the details for your new task."}
+            {taskToEdit ? "Update your task details." : "Fill in the details for your new task."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -146,9 +109,7 @@ export function NewTaskModal({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Design homepage" {...field} />
-                  </FormControl>
+                  <FormControl><Input placeholder="Task title..." {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -159,9 +120,7 @@ export function NewTaskModal({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Task details..." {...field} />
-                  </FormControl>
+                  <FormControl><Textarea placeholder="Task details..." {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -173,9 +132,7 @@ export function NewTaskModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Due Date</FormLabel>
-                    <FormControl>
-                      <Input type="datetime-local" {...field} />
-                    </FormControl>
+                    <FormControl><Input type="datetime-local" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -187,33 +144,17 @@ export function NewTaskModal({
                   <FormItem>
                     <FormLabel>Priority</FormLabel>
                     <FormControl>
-                      <div className="pt-2">
-                        <StarRating
-                          value={field.value}
-                          onChange={field.onChange}
-                        />
-                      </div>
+                      <div className="pt-2"><StarRating value={field.value} onChange={field.onChange} /></div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : taskToEdit ? (
-                  "Update Task"
-                ) : (
-                  "Create Task"
-                )}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (taskToEdit ? "Update Task" : "Create Task")}
               </Button>
             </DialogFooter>
           </form>
