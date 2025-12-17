@@ -1,13 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useGetTasksQuery } from "@/store/authApi"; // Use API hook
+import { useGetTasksQuery } from "@/store/authApi";
 import { Task } from "@/lib/types";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -21,10 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { StarRating } from "@/components/ui/star-rating";
 import { TaskFilters, TaskFiltersState } from "@/components/TaskFilters";
-import { Loader2, Calendar } from "lucide-react";
+import { Loader2, Calendar, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { NewTaskModal } from "./NewTaskForm";
 
 // --- TaskCard Sub-Component ---
 function TaskCard({ task }: { task: Task }) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -52,10 +55,26 @@ function TaskCard({ task }: { task: Task }) {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{task.title}</DialogTitle>
-          <DialogDescription>
-            Created: {new Date(task.created_at).toLocaleString()}
-          </DialogDescription>
+          <div className="flex justify-between items-start pr-8">
+            <div>
+              <DialogTitle>{task.title}</DialogTitle>
+              <DialogDescription>
+                Created: {new Date(task.created_at).toLocaleString()}
+              </DialogDescription>
+            </div>
+            {/* New Task Modal used for editing */}
+            <NewTaskModal
+              taskToEdit={task}
+              open={isEditOpen}
+              setOpen={setIsEditOpen}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              }
+            />
+          </div>
         </DialogHeader>
         <div className="py-4 space-y-4">
           <div>
@@ -84,10 +103,7 @@ function TaskCard({ task }: { task: Task }) {
 
 // --- Main TaskList Component ---
 export function TaskList() {
-  // 1. Get tasks from API
   const { data: allTasks = [], isLoading, error } = useGetTasksQuery();
-
-  // 2. Set up local state for filters
   const [filters, setFilters] = useState<TaskFiltersState>({
     rating: "all",
     sort: "newest",
@@ -97,23 +113,17 @@ export function TaskList() {
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
-  // 3. Filter and sort
   const filteredTasks = useMemo(() => {
     let tasks = [...allTasks];
-
-    // Filter by rating (priority)
     if (filters.rating !== "all") {
       const ratingNum = parseInt(filters.rating);
       tasks = tasks.filter((task) => task.priority === ratingNum);
     }
-
-    // Sort by created_at
     tasks.sort((a, b) => {
       const dateA = new Date(a.created_at).getTime();
       const dateB = new Date(b.created_at).getTime();
       return filters.sort === "newest" ? dateB - dateA : dateA - dateB;
     });
-
     return tasks;
   }, [allTasks, filters]);
 
@@ -136,9 +146,7 @@ export function TaskList() {
   return (
     <div className="mt-6 space-y-4">
       <h2 className="text-2xl font-semibold">Your Tasks</h2>
-
       <TaskFilters filters={filters} onFiltersChange={handleFiltersChange} />
-
       {filteredTasks.length === 0 ? (
         <Card>
           <CardContent className="pt-6">

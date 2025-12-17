@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCreateTaskMutation } from "@/store/authApi"; // Use the API hook
+import { useCreateTaskMutation, useUpdateTaskMutation } from "@/store/authApi";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,19 +28,39 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Loader2 } from "lucide-react";
 import { StarRating } from "@/components/ui/star-rating";
+import { Task } from "@/lib/types";
 
+// Schema updated to require minimum 1 star
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
-  priority: z.number().min(0).max(5),
+  priority: z.number().min(1, "Minimum 1 star is required").max(5),
   due_date: z.string().min(1, "Due date is required"),
 });
 
 type TaskFormInput = z.infer<typeof taskFormSchema>;
 
-export function NewTaskModal() {
-  const [open, setOpen] = useState(false);
-  const [createTask, { isLoading }] = useCreateTaskMutation(); // API mutation
+interface NewTaskModalProps {
+  taskToEdit?: Task;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  setOpen?: (open: boolean) => void;
+}
+
+export function NewTaskModal({
+  taskToEdit,
+  trigger,
+  open: externalOpen,
+  setOpen: setExternalOpen,
+}: NewTaskModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen =
+    setExternalOpen !== undefined ? setExternalOpen : setInternalOpen;
+
+  const [createTask, { isLoading: isCreating }] = useCreateTaskMutation();
+  const [updateTask, { isLoading: isUpdating }] = useUpdateTaskMutation();
+  const isLoading = isCreating || isUpdating;
 
   const form = useForm<TaskFormInput>({
     resolver: zodResolver(taskFormSchema),
@@ -52,38 +72,70 @@ export function NewTaskModal() {
     },
   });
 
+  // Load existing data when editing
+  useEffect(() => {
+    if (taskToEdit && open) {
+      form.reset({
+        title: taskToEdit.title,
+        description: taskToEdit.description || "",
+        priority: taskToEdit.priority,
+        // Convert SQL format (YYYY-MM-DD HH:mm:ss) to datetime-local format (YYYY-MM-DDTHH:mm)
+        due_date: taskToEdit.due_date.replace(" ", "T").slice(0, 16),
+      });
+    } else if (!taskToEdit && open) {
+      form.reset({
+        title: "",
+        description: "",
+        priority: 3,
+        due_date: "",
+      });
+    }
+  }, [taskToEdit, open, form]);
+
   async function onSubmit(data: TaskFormInput) {
     try {
-      // Backend expects Y-m-d H:i:s, input gives Y-m-dTh:i. We just replace T with space.
       const formattedDate = data.due_date.replace("T", " ") + ":00";
-
-      await createTask({
+      const payload = {
         title: data.title,
         description: data.description || "",
         priority: data.priority,
         due_date: formattedDate,
-      }).unwrap();
+      };
+
+      if (taskToEdit) {
+        // Send to PUT /api/tasks/{id}
+        await updateTask({ id: taskToEdit.id, data: payload }).unwrap();
+      } else {
+        // Send to POST /api/tasks
+        await createTask(payload).unwrap();
+      }
 
       form.reset();
       setOpen(false);
     } catch (error) {
-      console.error("Failed to create task:", error);
+      console.error("Failed to save task:", error);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Task
-        </Button>
+        {trigger || (
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Task
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Task</DialogTitle>
+          <DialogTitle>
+            {taskToEdit ? "Edit Task" : "Create New Task"}
+          </DialogTitle>
           <DialogDescription>
-            Fill in the details for your new task.
+            {taskToEdit
+              ? "Modify your task details."
+              : "Fill in the details for your new task."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -157,6 +209,8 @@ export function NewTaskModal() {
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : taskToEdit ? (
+                  "Update Task"
                 ) : (
                   "Create Task"
                 )}
