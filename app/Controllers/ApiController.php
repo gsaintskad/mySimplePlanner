@@ -2,30 +2,26 @@
 
 namespace App\Controllers;
 
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
+use App\Services\AuthService;
 use Exception;
 
 class ApiController
 {
     protected $userId;
+    protected $authService;
 
     public function __construct()
     {
-        // Konstruktor jest teraz pusty - nie uruchamiamy sesji
+        // Inicjalizujemy serwis autoryzacji, aby móc weryfikować tokeny
+        $this->authService = new AuthService();
     }
 
     /**
-     * Wymusza autentykację dla endpointu za pomocą tokena JWT.
+     * Wymusza autentykację dla endpointu.
+     * Logika HTTP (nagłówki) jest tutaj, logika weryfikacji tokena w Service.
      */
     protected function checkAuthentication()
     {
-        $secretKey = getenv('JWT_SECRET'); // Potrzebujesz tego w .env!
-        if (!$secretKey) {
-            $this->sendJsonResponse(['error' => 'JWT secret not configured on server'], 500);
-            exit;
-        }
-
         $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
         
         if (empty($authHeader) || !preg_match('/^Bearer\s+(.*?)$/', $authHeader, $matches)) {
@@ -36,22 +32,18 @@ class ApiController
         $token = $matches[1];
 
         try {
-            // Dekoduj token
-            $decoded = JWT::decode($token, new Key($secretKey, 'HS256'));
+            // Delegujemy weryfikację do serwisu
+            $this->userId = $this->authService->validateAccessToken($token);
             
-            // Token jest poprawny, wyodrębnij ID użytkownika z payloadu
-            $this->userId = $decoded->data->userId;
-
         } catch (Exception $e) {
-            // Błąd (np. token wygasł, zły podpis)
-            $this->sendJsonResponse(['error' => 'Unauthorized: ' . $e->getMessage()], 401);
+            // Błąd z serwisu (np. wygasły token)
+            $this->sendJsonResponse(['error' => $e->getMessage()], 401);
             exit;
         }
     }
 
     /**
-     * Pobiera dane wejściowe JSON z ciała żądania (bez zmian).
-     * @return array|null
+     * Pobiera dane wejściowe JSON z ciała żądania.
      */
     protected function getJsonInput(): ?array
     {
@@ -60,7 +52,7 @@ class ApiController
     }
 
     /**
-     * Wysyła odpowiedź w formacie JSON (bez zmian).
+     * Wysyła odpowiedź w formacie JSON.
      */
     protected function sendJsonResponse($data, int $statusCode = 200)
     {

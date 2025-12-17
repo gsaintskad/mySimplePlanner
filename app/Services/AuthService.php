@@ -4,11 +4,9 @@ namespace App\Services;
 
 use App\Models\User;
 use Firebase\JWT\JWT;
+use Firebase\JWT\Key; // Dodano import Key
 use Exception;
 
-/**
- * cała logika biznesowa związana z uwierzytelnianiem użytkowników.
- */
 class AuthService
 {
     private $userModel;
@@ -16,16 +14,35 @@ class AuthService
 
     public function __construct()
     {
-        // Serwis sam zarządza swoimi zależnościami (modelem)
         $this->userModel = new User();
-        
         $this->jwtSecret = getenv('JWT_SECRET');
         if (!$this->jwtSecret) {
-            // Błąd konfiguracji
             throw new Exception("JWT_SECRET environment variable is not set.", 500);
         }
     }
 
+    /* ... metody login, register, refresh, logout (bez zmian) ... */
+
+    // --- NOWA METODA ---
+    /**
+     * Weryfikuje access token i zwraca userId.
+     */
+    public function validateAccessToken(string $token): int
+    {
+        try {
+            // Dekodowanie tokena (biblioteka rzuci wyjątek, jeśli token jest nieprawidłowy lub wygasł)
+            $decoded = JWT::decode($token, new Key($this->jwtSecret, 'HS256'));
+            
+            // Zwróć ID użytkownika z payloadu
+            return $decoded->data->userId;
+        } catch (Exception $e) {
+            // Przechwytujemy wyjątek biblioteki i rzucamy własny z odpowiednim kodem
+            throw new Exception('Unauthorized: ' . $e->getMessage(), 401);
+        }
+    }
+    
+    // ... reszta metod prywatnych (createAccessToken itp.) ...
+    
     private function createAccessToken(int $userId, string $userName): string
     {
         $issuedAt = time();
@@ -50,91 +67,41 @@ class AuthService
         ];
         
         $token = JWT::encode($payload, $this->jwtSecret, 'HS256');
-        
-        // Zapisz token w bazie danych
         $this->userModel->saveRefreshToken($userId, $token, $expiryDateDb);
-        
         return $token;
     }
 
-    /**
-     * rejestracja
-     */
-
     public function register(string $name, string $password): void
     {
-        if (empty($name) || empty($password)) {
-            // Kod 400 - Bad Request
-            throw new Exception('Name and password are required', 400);
-        }
-
-        if ($this->userModel->findByName($name)) {
-            // Kod 409 - Conflict
-            throw new Exception('User with this name already exists', 409);
-        }
-
-        $success = $this->userModel->create($name, $password);
-        if (!$success) {
-            // Kod 500 - Internal Server Error
-            throw new Exception('Error during registration', 500);
-        }
+        if (empty($name) || empty($password)) throw new Exception('Name and password are required', 400);
+        if ($this->userModel->findByName($name)) throw new Exception('User with this name already exists', 409);
+        if (!$this->userModel->create($name, $password)) throw new Exception('Error during registration', 500);
     }
 
-    /**
-     * logowanie
-     */
     public function login(string $name, string $password): array
     {
         $user = $this->userModel->findByName($name);
-
-        if (!$user || !password_verify($password, $user['password'])) {
-            // Kod 401 - Unauthorized
-            throw new Exception('Invalid name or password', 401);
-        }
-
-        $accessToken = $this->createAccessToken($user['id'], $user['name']);
-        $refreshToken = $this->createRefreshToken($user['id']);
+        if (!$user || !password_verify($password, $user['password'])) throw new Exception('Invalid name or password', 401);
 
         return [
-            'accessToken' => $accessToken,
-            'refreshToken' => $refreshToken
+            'accessToken' => $this->createAccessToken($user['id'], $user['name']),
+            'refreshToken' => $this->createRefreshToken($user['id'])
         ];
     }
 
-    /**
-     * refresh
-     */
     public function refresh(string $refreshToken): string
     {
-        if (empty($refreshToken)) {
-            throw new Exception('Refresh token not found', 401);
-        }
-
+        if (empty($refreshToken)) throw new Exception('Refresh token not found', 401);
         $user = $this->userModel->findByRefreshToken($refreshToken);
-        
-        if (!$user) {
-            throw new Exception('Invalid or expired refresh token', 401);
-        }
-
-        // Token jest ważny, wygeneruj nowy access token
+        if (!$user) throw new Exception('Invalid or expired refresh token', 401);
         return $this->createAccessToken($user['id'], $user['name']);
     }
 
-    /**
-     * logout
-     */
     public function logout(string $refreshToken): void
     {
-        if (empty($refreshToken)) {
-            // Brak tokena
-            return;
+        if (!empty($refreshToken)) {
+            $user = $this->userModel->findByRefreshToken($refreshToken);
+            if ($user) $this->userModel->clearRefreshToken($user['id']);
         }
-        
-        $user = $this->userModel->findByRefreshToken($refreshToken);
-        if ($user) {
-            // Wyczyść token w bazie
-            $this->userModel->clearRefreshToken($user['id']);
-        }
-        // Jeśli użytkownik nie istnieje, token i tak jest nieważny
     }
 }

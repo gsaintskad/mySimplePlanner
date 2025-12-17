@@ -2,115 +2,78 @@
 
 namespace App\Controllers;
 
-use App\Models\Task;
+use App\Services\TaskService; // Importujemy nowy serwis
+use Exception;
 
 class TaskController extends ApiController
 {
-    private $taskModel;
+    private $taskService;
 
     public function __construct()
     {
         parent::__construct();
         // Wszystkie akcje w tym kontrolerze wymagają zalogowanego użytkownika
+        // To ustawi $this->userId (z ApiController)
         $this->checkAuthentication(); 
-        $this->taskModel = new Task();
+        
+        // Inicjalizacja serwisu
+        $this->taskService = new TaskService();
     }
 
-    // Pobiera wszystkie zadania dla zalogowanego użytkownika
-    // Metoda: GET, Endpoint: /api/tasks
+    // GET /api/tasks
     public function listTasks()
     {
-        $tasks = $this->taskModel->findByUserId($this->userId);
-        $this->sendJsonResponse($tasks, 200);
+        try {
+            $tasks = $this->taskService->getUserTasks($this->userId);
+            $this->sendJsonResponse($tasks, 200);
+        } catch (Exception $e) {
+            $this->sendJsonResponse(['error' => $e->getMessage()], $e->getCode() ?: 500);
+        }
     }
 
-    // Pobiera jedno zadanie
-    // Metoda: GET, Endpoint: /api/tasks/{id}
+    // GET /api/tasks/{id}
     public function getTask(int $taskId)
     {
-        if (!$this->taskModel->isOwner($taskId, $this->userId)) {
-            $this->sendJsonResponse(['error' => 'Task not found or permission denied'], 404);
-            return;
+        try {
+            $task = $this->taskService->getTask($taskId, $this->userId);
+            $this->sendJsonResponse($task, 200);
+        } catch (Exception $e) {
+            $this->sendJsonResponse(['error' => $e->getMessage()], $e->getCode() ?: 404);
         }
-        $task = $this->taskModel->findById($taskId);
-        $this->sendJsonResponse($task, 200);
     }
 
-    // Tworzy nowe zadanie
-    // Metoda: POST, Endpoint: /api/tasks
+    // POST /api/tasks
     public function create()
     {
-        $data = $this->getJsonInput();
-        
-        $title = $data['title'] ?? '';
-        $description = $data['description'] ?? '';
-        $priority = (int) ($data['priority'] ?? 1);
-        $dueDate = $data['due_date'] ?? '';
-
-        if (empty($title) || empty($dueDate)) {
-            $this->sendJsonResponse(['error' => 'Title and due_date are required'], 400);
-            return;
-        }
-
-        // Metoda create zwróci teraz ID nowego zadania lub false
-        $newTaskId = $this->taskModel->create($this->userId, $title, $description, $priority, $dueDate);
-        
-        if ($newTaskId) {
-            // Pobierz nowo utworzony obiekt zadania na podstawie jego ID
-            $newTask = $this->taskModel->findById($newTaskId);
-            
-            // Zwróć pełny obiekt zadania i status 201 (Created)
-            $this->sendJsonResponse($newTask, 201);
-        } else {
-            $this->sendJsonResponse(['error' => 'Failed to create task'], 500);
+        try {
+            $data = $this->getJsonInput();
+            $newTask = $this->taskService->createTask($this->userId, $data);
+            $this->sendJsonResponse($newTask, 201); // 201 Created
+        } catch (Exception $e) {
+            $this->sendJsonResponse(['error' => $e->getMessage()], $e->getCode() ?: 400);
         }
     }
 
-    // Aktualizuje zadanie
-    // Metoda: PUT, Endpoint: /api/tasks/{id}
+    // PUT /api/tasks/{id}
     public function update(int $taskId)
     {
-        $data = $this->getJsonInput();
-        
-        if (!$this->taskModel->isOwner($taskId, $this->userId)) {
-            $this->sendJsonResponse(['error' => 'Task not found or permission denied'], 404);
-            return;
-        }
-        
-        $title = $data['title'] ?? '';
-        $description = $data['description'] ?? '';
-        $priority = (int) ($data['priority'] ?? 1);
-        $dueDate = $data['due_date'] ?? '';
-
-        if (empty($title) || empty($dueDate)) {
-            $this->sendJsonResponse(['error' => 'Title and due_date are required'], 400);
-            return;
-        }
-
-        $success = $this->taskModel->update($taskId, $title, $description, $priority, $dueDate);
-        
-        if ($success) {
+        try {
+            $data = $this->getJsonInput();
+            $this->taskService->updateTask($taskId, $this->userId, $data);
             $this->sendJsonResponse(['success' => true, 'message' => 'Task updated'], 200);
-        } else {
-            $this->sendJsonResponse(['error' => 'Failed to update task'], 500);
+        } catch (Exception $e) {
+            $this->sendJsonResponse(['error' => $e->getMessage()], $e->getCode() ?: 500);
         }
     }
 
-    // Usuwa zadanie
-    // Metoda: DELETE, Endpoint: /api/tasks/{id}
+    // DELETE /api/tasks/{id}
     public function delete(int $taskId)
     {
-        if (!$this->taskModel->isOwner($taskId, $this->userId)) {
-            $this->sendJsonResponse(['error' => 'Task not found or permission denied'], 404);
-            return;
-        }
-
-        $success = $this->taskModel->delete($taskId);
-
-        if ($success) {
+        try {
+            $this->taskService->deleteTask($taskId, $this->userId);
             $this->sendJsonResponse(null, 204); // 204 No Content
-        } else {
-            $this->sendJsonResponse(['error' => 'Failed to delete task'], 500);
+        } catch (Exception $e) {
+            $this->sendJsonResponse(['error' => $e->getMessage()], $e->getCode() ?: 500);
         }
     }
 }
